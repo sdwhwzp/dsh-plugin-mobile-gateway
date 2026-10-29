@@ -32,6 +32,8 @@ DeepSeek Harness 的设备鉴权移动网关，支持会话与实时事件、排
 
 ## 协议与 DSH 兼容层
 
+本地 Harness 适配使用 `dsh-client-ui-renderer` 提供浏览器 Slot 服务。`hello.capabilities` 仅在 Host 已挂载 `schedule` 服务时包含 `schedule-management`；默认 Web profile 不启用定时任务，需要另行安装 `@deepseek-ai/dsh-experimental-schedule-bundle`。
+
 移动端连接的是本项目维护的 `dsh-mobile-v1`，不是 DSH 的内部 Remote 协议。插件内部通过独立 Host Adapter 对接 DSH 0.2.1-rc.2 的 Remote Gateway；Session、Workspace、Settings、Commands、Goals、Schedule、Permission Presets、Plugin Manager 等 namespace 和严格参数只存在于该适配层。插件管理的请求帧及 DSH Mobile 页面方案见 [RC2 插件管理对接方案](docs/dsh-0.2.0-rc.2-plugin-management-mobile-integration.md)。
 
 DSH 0.2.1-rc.2 要求每次 Remote 调用携带 `peer`。网关通过 `ctx.connection.createPeer()` 创建一个随插件释放的本机用户 Peer，普通请求、首帧读取和实时订阅都由 Host Adapter 注入它；移动端不能设置调用方身份。问答与审批继续由网关的 Host 监听器处理。旧网关漏传此字段时会出现 `Cannot read properties of undefined (reading 'signal')`，升级 DSH 后需重新安装本源码版本并重启 `dsh web`，手机无需更改协议。

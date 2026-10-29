@@ -320,7 +320,6 @@ function expectRejected(url, options = {}) {
     'commands',
     'tasks',
     'goals',
-    'schedule-management',
     'plugin-management-v1',
     'speech-input-v1',
     'file-upload-v1',

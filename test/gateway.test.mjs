@@ -302,7 +302,7 @@ function fakeApi() {
 }
 const api = fakeApi()
 const ctx = {
-  get(name) { return name === 'webServer' ? webServer : undefined },
+  get(name) { return name === 'webServer' ? webServer : name === 'schedule' ? {} : undefined },
   on(name, fn) { listeners[name] = fn; return () => {} },
   effect(fn) { disposer = fn() },
 }
