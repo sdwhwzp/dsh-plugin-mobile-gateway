@@ -45,6 +45,18 @@ async function waitForLanStatus(base) {
   throw new Error('LAN listener did not become ready')
 }
 
+async function waitForCloudflareOnline(base) {
+  const deadline = Date.now() + 10_000
+  let status
+  do {
+    status = await (await fetch(`${base}/mgw/status`)).json()
+    if (status.cloudflare.state === 'online') return status
+    assert.notEqual(status.cloudflare.state, 'error', JSON.stringify(status.cloudflare))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  } while (Date.now() < deadline)
+  assert.fail(`Cloudflare fixture did not become online: ${JSON.stringify(status.cloudflare)}`)
+}
+
 ;(async () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-mobile-lan-'))
   const portProbe = net.createServer()
@@ -262,14 +274,7 @@ async function waitForLanStatus(base) {
     assert.equal((await tunnelHello).authenticated, true)
     tunnelClient.close()
     await once(tunnelClient, 'close')
-    let connected = false
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      const current = await (await fetch(`${base}/mgw/status`)).json()
-      if (current.cloudflare.state === 'online') { connected = true; break }
-      await new Promise((resolve) => setTimeout(resolve, 20))
-    }
-    assert.equal(connected, true)
-    const live = await (await fetch(`${base}/mgw/status`)).json()
+    const live = await waitForCloudflareOnline(base)
     assert.equal(live.endpoints.includes('wss://gateway.example.com/ws/mobile'), true)
     assert.equal(live.cloudflare.enabled, true)
     assert.equal(JSON.stringify(live).includes('eyJ.test-token'), false)
@@ -280,12 +285,7 @@ async function waitForLanStatus(base) {
       body: JSON.stringify({ enabled: true, mode: 'quick' }),
     })
     assert.equal(switched.status, 200)
-    let quickStatus
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      quickStatus = await (await fetch(`${base}/mgw/status`)).json()
-      if (quickStatus.cloudflare.state === 'online') break
-      await new Promise((resolve) => setTimeout(resolve, 20))
-    }
+    const quickStatus = await waitForCloudflareOnline(base)
     assert.equal(quickStatus.cloudflare.publicUrl, 'wss://sample-quick.trycloudflare.com/ws/mobile')
     assert.equal(quickStatus.publicUrl, quickStatus.cloudflare.publicUrl)
     assert.equal(quickStatus.endpoints.includes(quickStatus.cloudflare.publicUrl), true)
@@ -294,13 +294,7 @@ async function waitForLanStatus(base) {
     })
     assert.equal(restarted.status, 200)
     assert.equal((await restarted.json()).enabled, true)
-    let reconnected = false
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      const current = await (await fetch(`${base}/mgw/status`)).json()
-      if (current.cloudflare.state === 'online') { reconnected = true; break }
-      await new Promise((resolve) => setTimeout(resolve, 20))
-    }
-    assert.equal(reconnected, true)
+    await waitForCloudflareOnline(base)
     const lanPairResponse = await fetch(`${base}/mgw/pair`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: base },
