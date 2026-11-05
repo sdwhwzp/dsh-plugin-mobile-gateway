@@ -1,4 +1,4 @@
-# dsh Mobile Gateway — WebSocket 协议参考
+# dsh Mobile Gateway — 移动业务与传输协议参考
 
 移动端通过经过设备鉴权的 WebSocket 连接与 dsh 通信：订阅 agent 实时输出、发送文字和图片、处理 Human-in-the-loop 提问与操作审批、查询会话/工作区/历史、调整会话配置。本协议由持久化插件 `dsh-plugin-mobile-gateway` 实现。当前源码适配 DSH 0.2.1-rc.2 / Session format 4；移动端实时流接入见 [rc.2 接入说明](docs/dsh-rc2-mobile-integration.md)，插件管理见 [RC2 插件管理对接方案](docs/dsh-0.2.0-rc.2-plugin-management-mobile-integration.md)。
 
@@ -9,6 +9,8 @@ DSH Remote 要求的 `peer` 由网关在 Host 内部创建并注入，身份沿�
 - **公网端点**：必须由 TLS 反向代理提供 `wss://<域名>/ws/mobile`
 - **帧格式**：全部为 JSON 文本帧（UTF-8）；图片字节及语音 WAV 使用标准 Base64
 - **连接即推送**：连上后服务端立刻发送一条 `hello`，之后 agent 输出以 `event` 帧实时推送
+
+实验传输扩展：`webrtc-upgrade-v1` 复用鉴权 WebSocket 作为 bootstrap，两个独立 PC 分别承载 control/conversation，显式整组提交后才接入下文业务。WebSocket 继续 JSON 文本；RTC 使用 MGW1 有界二进制分片。实验默认关闭；原有协议和配对不变。完整信令、票据、安全、回退、分片头和 App 状态机以 [WebRTC 接入契约](docs/webrtc-app-integration.md) 为准；共享字节向量见 [transport-v1 fixtures](test/fixtures/transport-v1/frames.json)。网关可联调，App 待接入。
 
 ---
 
@@ -315,7 +317,7 @@ Agent 调用 DSH 的 `ask_user_question` 工具时，插件接入 Host 的
   "outcome":"answered" }
 ```
 
-`outcome` 为 `answered` 或 `cancelled`。存在匹配 Session 的移动连接时，移动网关优先认领请求，多台移动设备中的第一个合法响应获胜；若没有匹配连接或连接全部断开，则通过 `next()` 回退给 WebUI/后续 Host answerer。所有移动连接都会收到由移动端完成的最终状态并应关闭对应选择界面。重连时网关会重放仍由它持有的问题；DSH 进程重启则会取消这些仅存在于运行时的问题。
+`outcome` 为 `answered` 或 `cancelled`。网关启用时会登记待答提问，并同时保留 WebUI/后续 Host answerer；多台移动设备与 WebUI 中的第一个合法响应获胜。实时广播仍按订阅 Session 过滤，后台会话的提问会在设备首次连接或之后打开对应 Session 时以 `replay:true` 重放。若没有可用移动连接和后续 answerer，则保持原有回退行为，不挂住工具调用。所有移动连接都会收到由移动端完成的最终状态并应关闭对应选择界面；DSH 进程重启则会取消这些仅存在于运行时的问题。
 
 ---
 
@@ -1479,3 +1481,18 @@ history. Older gateways without the capability continue using one connection.
 - 子会话父子关系由 Host 校验，非法关系返回 `subagent/unauthorized` 等错误；无法继续的模式返回 `subagent/not-resumable`。
 - 发送回执只表示 inbox 接受，不保证执行完成，也不提供自动重试去重保证。断线无回执应核对历史/队列，不能盲目重发。
 - 本次不提供直接创建成员或变更共享任务的移动 RPC；由用户在 Lead 对话中提出要求，Host 团队工具执行，APP 等待权威投影更新。
+## 工具结果图片（tool-result-images-v1）
+
+`hello.capabilities` 包含 `tool-result-images-v1` 时，实时 `tool/result`、
+`tool/ptc-dispatch`、`tool/code-dispatch` 的 `event.images` 可携带持久图片附件引用，
+结构与用户/助手消息的 `images` 相同：`attachmentId/mediaType/bytes/width/height/name?`。
+协议仍为 3，历史格式仍为 4。conversation 历史与 opening snapshot 在上述事件的
+`data.images` 中提供同一列表；原始历史可从内容块解析引用。
+
+图片通过现有控制请求 `attachment(sessionId, attachmentId)` 读取，继续由 Host 校验会话引用，
+本能力不开放本地文件路径或插件 HTTP 路由。PTC/code 事件同时保留
+`rootCallId/parentCallId/subCallId/name/arguments/isError/output/outputTruncated/error?`，
+`turn/step` 可能缺失。图片应独立于工具折叠区显示。
+
+完整约束、官方 Host 对不同内容结构的授权限制、移动端共享层及 Android/iOS 实施步骤见
+[生图插件图片接入](docs/generated-images-mobile-integration.md)。
